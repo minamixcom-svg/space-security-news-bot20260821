@@ -13,10 +13,9 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
-EN_QUERY = urllib.parse.quote(
-    '("space security" OR "space defense" OR "military space")'
-)
+# よりシンプルで広範囲にヒットする検索キーワードを設定
+JP_QUERY = urllib.parse.quote("宇宙 安全保障")
+EN_QUERY = urllib.parse.quote("space security")
 
 RSS_URLS = [
     f"https://news.google.com/rss/search?q={JP_QUERY}&hl=ja&gl=JP&ceid=JP:ja",
@@ -26,23 +25,26 @@ RSS_URLS = [
 
 def fetch_latest_news():
     articles = []
-    now = time.time()
-    time_limit_sec = 48 * 60 * 60  # 過去48時間の記事を対象
 
     for url in RSS_URLS:
+        print(f"RSS取得試行: {url}")
         feed = feedparser.parse(url)
+        print(f"取得できたエントリ数: {len(feed.entries)}")
+
         for entry in feed.entries:
-            published_parsed = entry.get("published_parsed")
-            if published_parsed:
-                published_time = time.mktime(published_parsed)
-                if now - published_time <= time_limit_sec:
-                    articles.append(
-                        {
-                            "title": entry.title,
-                            "link": entry.link,
-                            "summary": entry.get("summary", ""),
-                        }
-                    )
+            title = entry.get("title", "")
+            # linkまたはidからURLを取得
+            link = entry.get("link", "") or entry.get("id", "")
+            summary = entry.get("summary", "") or title
+
+            if title and link:
+                articles.append(
+                    {
+                        "title": title,
+                        "link": link,
+                        "summary": summary,
+                    }
+                )
     return articles
 
 
@@ -63,7 +65,6 @@ def summarize_article(client, article):
 - [要約3]
 ■ URL: {article['link']}
 """
-    # 最新の安定モデル gemini-2.0-flash を使用
     response = client.models.generate_content(
         model="gemini-2.0-flash",
         contents=prompt,
@@ -89,16 +90,16 @@ def main():
 
     print("2. ニュース記事を取得中...")
     articles = fetch_latest_news()
+    print(f"検出された合計記事数: {len(articles)}")
 
     if not articles:
-        print("該当ニュースなし")
+        print("ニュース記事が検出されませんでした。")
         send_email(
             f"【日刊】宇宙・安全保障 ニュースまとめ ({datetime.date.today()})",
             "本日は該当する最新ニュースが検出されませんでした。",
         )
         return
 
-    print(f"3. {len(articles)}件の記事を検出。要約を開始します...")
     summarized_results = []
     seen_links = set()
     count = 0
@@ -112,25 +113,24 @@ def main():
             summary_text = summarize_article(client, article)
             summarized_results.append(summary_text)
             count += 1
-            print(f"要約完了 ({count}件目): {article['title'][:20]}...")
-            if count >= 8:
+            print(f"要約成功 ({count}件目): {article['title'][:20]}...")
+            if count >= 8:  # 8件に制限
                 break
         except Exception as e:
-            print(f"要約エラー: {e}")
+            print(f"要約処理中にエラー発生: {e}")
 
     if not summarized_results:
-        print("要約結果が作成されませんでした。")
+        print("要約結果の生成に失敗しました。")
         return
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
     email_body = f"{today_str} の宇宙・安全保障に関する主要ニュース（{len(summarized_results)}件）です。\n\n"
-    email_body += "\n\n" + ("=" * 40) + "\n\n"
     email_body += "\n\n" + ("=" * 40) + "\n\n".join(summarized_results)
 
-    print("4. メールを送信中...")
+    print("3. メール送信中...")
     send_email(email_subject, email_body)
-    print("送信が完了しました！")
+    print("送信完了！")
 
 
 if __name__ == "__main__":
