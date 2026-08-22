@@ -9,7 +9,6 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
     steps:
-      # ref: main を明示指定して、必ず main ブランチの最新コードを取得
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -24,11 +23,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install google-genai feedparser googlenewsdecoder
-
-      # 実行直前に main.py 内の「gemini-2.0-flash」を「gemini-1.5-flash」に強制書き換え（保険処理）
-      - name: Force Update Model Name
-        run: |
-          sed -i 's/gemini-2.0-flash/gemini-1.5-flash/g' main.py
 
       - name: Run main.py
         env:
