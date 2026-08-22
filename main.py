@@ -1,3 +1,5 @@
+import os
+print("【デバッグ情報】実行中のファイルパス:", os.path.abspath(__file__))
 import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
