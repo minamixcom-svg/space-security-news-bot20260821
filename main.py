@@ -4,6 +4,7 @@ from email.mime.text import MIMEText
 import os
 import re
 import smtplib
+import traceback
 import urllib.parse
 
 import feedparser
@@ -15,8 +16,8 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-# 利用可能な最新モデル「gemini-3.6-flash」を指定
-GEMINI_MODEL = "gemini-3.6-flash"
+# 安定して動作する基本モデル指定
+GEMINI_MODEL = "gemini-2.0-flash"
 MAX_ARTICLES = 10
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
@@ -44,9 +45,6 @@ def clean_html(text):
 
 
 def resolve_link(google_url):
-    """
-    Google Newsの暗号化URLを元記事の直リンクに復元する（iPhone/Safari対策）
-    """
     try:
         decoded = new_decodurl(google_url)
         if decoded and decoded.get("status") and decoded.get("decoded_url"):
@@ -93,9 +91,6 @@ def fetch_latest_news():
 
 
 def summarize_all_news(client, articles):
-    """
-    全ニュースを一括処理し、全体の総括とトレンド分析を生成する
-    """
     articles_text = ""
     for idx, item in enumerate(articles, 1):
         articles_text += f"【記事{idx}】\nタイトル: {item['title']}\n概要: {item['summary']}\nURL: {item['link']}\n\n"
@@ -122,19 +117,18 @@ def summarize_all_news(client, articles):
   - [日本語タイトル](URL)
 """
 
+    # SDK呼び出しの確実な形式
     response = client.models.generate_content(
         model=GEMINI_MODEL,
-        contents=prompt,
+        contents=prompt
     )
+
     if not response or not response.text:
-        raise ValueError("Gemini応答が空でした。")
+        raise ValueError("Gemini APIからの応答テキストが空です。")
     return response.text.strip()
 
 
 def send_html_email(subject, text_content):
-    """
-    iPhoneでも読みやすく、リンクが直接タップできるHTML形式でメールを送信
-    """
     msg = MIMEMultipart("alternative")
     msg["From"] = GMAIL_USER
     msg["To"] = TO_EMAIL
@@ -172,8 +166,10 @@ def main():
 
     print("1. Gemini APIクライアント初期化")
     if not GEMINI_API_KEY:
-        print("エラー: GEMINI_API_KEY が未設定です。")
+        print("エラー: GEMINI_API_KEY が環境変数に設定されていません。")
         return
+    
+    # クライアントの明示的初期化
     client = genai.Client(api_key=GEMINI_API_KEY)
     print(f"使用モデル: {GEMINI_MODEL}")
 
@@ -192,10 +188,13 @@ def main():
     print("\n3. AIによる全体総括・傾向分析の生成中...")
     try:
         overall_summary = summarize_all_news(client, articles)
-        print("  └ 総括生成完了")
+        print("  └ 総括の生成に成功しました！")
     except Exception as e:
-        print(f"  └ AI分析エラー: {e}")
-        overall_summary = f"本日のニュース総括の生成に失敗しました。\n\n【収集記事一覧】\n" + "\n".join([f"- [{a['title']}]({a['link']})" for a in articles])
+        print(f"  └ AI分析中にエラーが発生しました: {e}")
+        print("--- 詳細エラーログ ---")
+        traceback.print_exc()
+        print("----------------------")
+        overall_summary = f"※ AI要約の生成中にエラーが発生したため、ニュース一覧のみを送信します。\nエラー理由: {e}\n\n【収集記事一覧】\n" + "\n".join([f"- [{a['title']}]({a['link']})" for a in articles])
 
     email_body = f"■ {today_str} 宇宙・安全保障トピックス分析\n\n" + overall_summary
 
