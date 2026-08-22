@@ -15,8 +15,8 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-# APIの指示に従い最新モデル「gemini-3.6-flash」に指定変更
-GEMINI_MODEL = "gemini-3.6-flash"
+# 確実に動作する標準安定モデル
+GEMINI_MODEL = "gemini-1.5-flash"
 MAX_ARTICLES = 8
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
@@ -43,6 +43,18 @@ def clean_html(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def fix_google_news_link(link):
+    """
+    Google News RSSの暗号化URLをiPhone等で正常に開ける形式に補正
+    """
+    if not link:
+        return "https://news.google.com/"
+    # Google Newsのトラッキング付き直リンクを展開
+    if "news.google.com" in link and "/articles/" in link:
+        return link.replace("./articles/", "https://news.google.com/articles/")
+    return link
+
+
 def fetch_latest_news():
     articles = []
     for url in RSS_URLS:
@@ -50,13 +62,14 @@ def fetch_latest_news():
             feed = feedparser.parse(url)
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
-                link = entry.get("link", "") or entry.get("id", "")
+                raw_link = entry.get("link", "") or entry.get("id", "")
+                link = fix_google_news_link(raw_link)
                 summary = clean_html(entry.get("summary", "").strip()) or title
 
                 if title:
                     articles.append({
                         "title": title,
-                        "link": link if link else "https://news.google.com/",
+                        "link": link,
                         "summary": summary,
                     })
         except Exception as e:
