@@ -24,7 +24,7 @@ TO_EMAIL = "minamix.com@gmail.com"
 
 # Geminiで使用するモデル
 # 以前の gemini-2.0-flash / gemini-2.5-flash から変更
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # 1日にメールへ掲載するニュース数
 MAX_ARTICLES = 8
