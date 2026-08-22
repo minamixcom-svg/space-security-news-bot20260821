@@ -13,7 +13,6 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-# よりシンプルで広範囲にヒットする検索キーワードを設定
 JP_QUERY = urllib.parse.quote("宇宙 安全保障")
 EN_QUERY = urllib.parse.quote("space security")
 
@@ -25,15 +24,10 @@ RSS_URLS = [
 
 def fetch_latest_news():
     articles = []
-
     for url in RSS_URLS:
-        print(f"RSS取得試行: {url}")
         feed = feedparser.parse(url)
-        print(f"取得できたエントリ数: {len(feed.entries)}")
-
         for entry in feed.entries:
             title = entry.get("title", "")
-            # linkまたはidからURLを取得
             link = entry.get("link", "") or entry.get("id", "")
             summary = entry.get("summary", "") or title
 
@@ -65,8 +59,9 @@ def summarize_article(client, article):
 - [要約3]
 ■ URL: {article['link']}
 """
+    # 最新推奨モデル gemini-2.5-flash に変更
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
     )
     return response.text.strip()
@@ -93,7 +88,6 @@ def main():
     print(f"検出された合計記事数: {len(articles)}")
 
     if not articles:
-        print("ニュース記事が検出されませんでした。")
         send_email(
             f"【日刊】宇宙・安全保障 ニュースまとめ ({datetime.date.today()})",
             "本日は該当する最新ニュースが検出されませんでした。",
@@ -114,13 +108,13 @@ def main():
             summarized_results.append(summary_text)
             count += 1
             print(f"要約成功 ({count}件目): {article['title'][:20]}...")
-            if count >= 8:  # 8件に制限
+            if count >= 8:
                 break
         except Exception as e:
-            print(f"要約処理中にエラー発生: {e}")
+            print(f"要約エラー ({article['title']}): {e}")
 
     if not summarized_results:
-        print("要約結果の生成に失敗しました。")
+        print("要約結果が作成されませんでした。")
         return
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
