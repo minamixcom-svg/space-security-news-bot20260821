@@ -16,8 +16,8 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-# 安定して動作する基本モデル指定
-GEMINI_MODEL = "gemini-3.7-flash"
+# API指示に従い最新の指定「gemini-3.6-flash」に更新
+GEMINI_MODEL = "gemini-3.6-flash"
 MAX_ARTICLES = 10
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
@@ -45,6 +45,9 @@ def clean_html(text):
 
 
 def resolve_link(google_url):
+    """
+    Google Newsの暗号化URLを元記事の直リンクに復元（iPhone/Safari対策）
+    """
     try:
         decoded = new_decodurl(google_url)
         if decoded and decoded.get("status") and decoded.get("decoded_url"):
@@ -91,6 +94,9 @@ def fetch_latest_news():
 
 
 def summarize_all_news(client, articles):
+    """
+    全ニュースを一括分析し、全体の総括サマリーを作成
+    """
     articles_text = ""
     for idx, item in enumerate(articles, 1):
         articles_text += f"【記事{idx}】\nタイトル: {item['title']}\n概要: {item['summary']}\nURL: {item['link']}\n\n"
@@ -117,10 +123,9 @@ def summarize_all_news(client, articles):
   - [日本語タイトル](URL)
 """
 
-    # SDK呼び出しの確実な形式
     response = client.models.generate_content(
         model=GEMINI_MODEL,
-        contents=prompt
+        contents=prompt,
     )
 
     if not response or not response.text:
@@ -129,6 +134,9 @@ def summarize_all_news(client, articles):
 
 
 def send_html_email(subject, text_content):
+    """
+    iPhoneでもリンクがタップ可能なHTMLメールの送信
+    """
     msg = MIMEMultipart("alternative")
     msg["From"] = GMAIL_USER
     msg["To"] = TO_EMAIL
@@ -168,8 +176,7 @@ def main():
     if not GEMINI_API_KEY:
         print("エラー: GEMINI_API_KEY が環境変数に設定されていません。")
         return
-    
-    # クライアントの明示的初期化
+
     client = genai.Client(api_key=GEMINI_API_KEY)
     print(f"使用モデル: {GEMINI_MODEL}")
 
