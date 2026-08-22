@@ -10,25 +10,14 @@ import urllib.parse
 import feedparser
 from google import genai
 
-# ============================================================
-# 設定
-# ============================================================
-
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
-
 TO_EMAIL = "minamix.com@gmail.com"
 
-# 正式なモデル名を指定
+# APIの指示に従い最新モデル「gemini-3.6-flash」に指定変更
 GEMINI_MODEL = "gemini-3.6-flash"
-
 MAX_ARTICLES = 8
-
-
-# ============================================================
-# Google News RSS（検索クエリを拡張）
-# ============================================================
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
 EN_QUERY = urllib.parse.quote('("space security" OR "space defense" OR "military space")')
@@ -38,10 +27,6 @@ RSS_URLS = [
     f"https://news.google.com/rss/search?q={EN_QUERY}&hl=en-US&gl=US&ceid=US:en",
 ]
 
-
-# ============================================================
-# HTML除去
-# ============================================================
 
 def clean_html(text):
     if not text:
@@ -55,48 +40,29 @@ def clean_html(text):
             .replace("&quot;", '"')
             .replace("&#39;", "'")
     )
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    return re.sub(r"\s+", " ", text).strip()
 
-
-# ============================================================
-# ニュース取得
-# ============================================================
 
 def fetch_latest_news():
     articles = []
-
     for url in RSS_URLS:
-        print(f"RSS取得中: {url}")
         try:
             feed = feedparser.parse(url)
-            print(f"  └ 取得件数: {len(feed.entries)}件")
-
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "") or entry.get("id", "")
-                summary = clean_html(entry.get("summary", "").strip())
-
-                if not summary:
-                    summary = title
+                summary = clean_html(entry.get("summary", "").strip()) or title
 
                 if title:
-                    articles.append(
-                        {
-                            "title": title,
-                            "link": link if link else "https://news.google.com/",
-                            "summary": summary,
-                        }
-                    )
+                    articles.append({
+                        "title": title,
+                        "link": link if link else "https://news.google.com/",
+                        "summary": summary,
+                    })
         except Exception as e:
-            print(f"  └ RSS取得エラー: {e}")
-
+            print(f"RSS取得エラー: {e}")
     return articles
 
-
-# ============================================================
-# Geminiによるニュース要約
-# ============================================================
 
 def summarize_article(client, article):
     prompt = f"""
@@ -122,34 +88,16 @@ def summarize_article(client, article):
 
 ■ URL: {article['link']}
 """
-
     response = client.models.generate_content(
-        model= GEMINI_MODEL,
+        model=GEMINI_MODEL,
         contents=prompt,
     )
-
-    if response is None or not response.text:
-        raise ValueError("Geminiからの応答が空でした。")
-
+    if not response or not response.text:
+        raise ValueError("Gemini応答が空です")
     return response.text.strip()
 
 
-def create_error_summary(article):
-    return (
-        f"■ タイトル: {article['title']}\n"
-        f"■ AI要約: 今回はAIによる要約を取得できませんでした。\n"
-        f"■ URL: {article['link']}"
-    )
-
-
-# ============================================================
-# メール送信
-# ============================================================
-
 def send_email(subject, body):
-    if not GMAIL_USER or not GMAIL_APP_PASSWORD or not TO_EMAIL:
-        raise ValueError("メール送信に必要な環境変数が不足しています。")
-
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
     msg["To"] = TO_EMAIL
@@ -161,10 +109,6 @@ def send_email(subject, body):
         server.send_message(msg)
 
 
-# ============================================================
-# メイン処理
-# ============================================================
-
 def main():
     print("=" * 60)
     print("宇宙・安全保障ニュース自動配信")
@@ -172,26 +116,21 @@ def main():
 
     print("1. Gemini APIクライアントの初期化")
     if not GEMINI_API_KEY:
-        print("エラー: GEMINI_API_KEY が設定されていません。")
+        print("エラー: GEMINI_API_KEY が未設定です。")
         return
-
+    client = genai.Client(api_key=GEMINI_API_KEY)
     print(f"使用Geminiモデル: {GEMINI_MODEL}")
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-    except Exception as e:
-        print(f"Geminiクライアント初期化エラー: {e}")
-        return
 
     print("\n2. ニュース記事の取得")
     articles = fetch_latest_news()
     print(f"検出された合計記事数: {len(articles)}件")
 
     if not articles:
-        print("ニュース記事が1件も取得できませんでした。")
         today_str = datetime.date.today().strftime("%Y-%m-%d")
-        email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
-        email_body = f"{today_str} の宇宙・安全保障ニュースです。\n\n本日は該当する最新ニュースが検出されませんでした。"
-        send_email(email_subject, email_body)
+        send_email(
+            f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})",
+            "本日は該当する最新ニュースが検出されませんでした。"
+        )
         return
 
     summarized_results = []
@@ -211,21 +150,15 @@ def main():
         try:
             print("  └ Geminiによる要約中...")
             summary_text = summarize_article(client, article)
-            if summary_text:
-                summarized_results.append(summary_text)
-                success_count += 1
-                print("  └ 要約成功")
-            else:
-                summarized_results.append(create_error_summary(article))
-                error_count += 1
+            summarized_results.append(summary_text)
+            success_count += 1
+            print("  └ 要約成功")
         except Exception as e:
             error_count += 1
             print(f"  └ 要約エラー: {e}")
-            summarized_results.append(create_error_summary(article))
 
         if len(summarized_results) >= MAX_ARTICLES:
             break
-
         time.sleep(1)
 
     print("\n4. 要約処理結果")
@@ -235,12 +168,15 @@ def main():
     email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
     divider = "\n\n" + ("=" * 50) + "\n\n"
 
-    email_body = (
-        f"{today_str} の宇宙・安全保障に関する主要ニュース（{len(summarized_results)}件）です。\n\n"
-        f"AI要約成功: {success_count}件\nAI要約失敗: {error_count}件\n"
-        + divider
-        + divider.join(summarized_results)
-    )
+    if summarized_results:
+        email_body = (
+            f"{today_str} の宇宙・安全保障に関する主要ニュース（{len(summarized_results)}件）です。\n\n"
+            f"AI要約成功: {success_count}件\nAI要約失敗: {error_count}件\n"
+            + divider
+            + divider.join(summarized_results)
+        )
+    else:
+        email_body = f"{today_str} のニュース要約生成に失敗しました。"
 
     print("\n5. メール送信")
     send_email(email_subject, email_body)
