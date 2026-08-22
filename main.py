@@ -27,7 +27,7 @@ def fetch_latest_news():
     for url in RSS_URLS:
         feed = feedparser.parse(url)
         for entry in feed.entries:
-            title = entry.get("title", "")
+            title = entry.get("title", "").strip()
             link = entry.get("link", "") or entry.get("id", "")
             summary = entry.get("summary", "") or title
 
@@ -59,9 +59,9 @@ def summarize_article(client, article):
 - [要約3]
 ■ URL: {article['link']}
 """
-    # 最新推奨モデル gemini-2.5-flash に変更
+    # 推奨モデル指定（gemini-2.0-flash / gemini-1.5-flash 等）
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         contents=prompt,
     )
     return response.text.strip()
@@ -95,21 +95,28 @@ def main():
         return
 
     summarized_results = []
-    seen_links = set()
+    seen_titles = set()
     count = 0
 
     for article in articles:
-        if article["link"] in seen_links:
+        # 重複判定（タイトルベースで比較して同一ニュースを排除）
+        title_key = article["title"].lower()
+        if title_key in seen_titles:
             continue
-        seen_links.add(article["link"])
+        seen_titles.add(title_key)
 
         try:
             summary_text = summarize_article(client, article)
             summarized_results.append(summary_text)
             count += 1
             print(f"要約成功 ({count}件目): {article['title'][:20]}...")
+            
             if count >= 8:
                 break
+
+            # APIレート制限対策のウェイト処理
+            time.sleep(1)
+
         except Exception as e:
             print(f"要約エラー ({article['title']}): {e}")
 
@@ -120,7 +127,7 @@ def main():
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
     email_body = f"{today_str} の宇宙・安全保障に関する主要ニュース（{len(summarized_results)}件）です。\n\n"
-    email_body += "\n\n" + ("=" * 40) + "\n\n".join(summarized_results)
+    email_body += "\n\n" + ("=" * 40 + "\n\n").join(summarized_results)
 
     print("3. メール送信中...")
     send_email(email_subject, email_body)
