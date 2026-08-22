@@ -4,20 +4,19 @@ from email.mime.text import MIMEText
 import os
 import re
 import smtplib
-import time
 import urllib.parse
 
 import feedparser
 from google import genai
+from googlenewsdecoder import new_decodurl
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-# 確実に動作する標準安定モデル
 GEMINI_MODEL = "gemini-1.5-flash"
-MAX_ARTICLES = 8
+MAX_ARTICLES = 10
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
 EN_QUERY = urllib.parse.quote('("space security" OR "space defense" OR "military space")')
@@ -43,79 +42,124 @@ def clean_html(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def fix_google_news_link(link):
+def resolve_link(google_url):
     """
-    Google News RSSの暗号化URLをiPhone等で正常に開ける形式に補正
+    Google Newsの暗号化URLを元記事の直リンクに復元する（iPhone/Safari対策）
     """
-    if not link:
-        return "https://news.google.com/"
-    # Google Newsのトラッキング付き直リンクを展開
-    if "news.google.com" in link and "/articles/" in link:
-        return link.replace("./articles/", "https://news.google.com/articles/")
-    return link
+    try:
+        decoded = new_decodurl(google_url)
+        if decoded and decoded.get("status") and decoded.get("decoded_url"):
+            return decoded["decoded_url"]
+    except Exception as e:
+        print(f"  └ URLデコード失敗: {e}")
+    return google_url
 
 
 def fetch_latest_news():
     articles = []
+    seen_titles = set()
+
     for url in RSS_URLS:
         try:
             feed = feedparser.parse(url)
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
+                title_key = title[:40].lower()
+
+                if not title or title_key in seen_titles:
+                    continue
+
+                seen_titles.add(title_key)
                 raw_link = entry.get("link", "") or entry.get("id", "")
-                link = fix_google_news_link(raw_link)
+                real_link = resolve_link(raw_link)
                 summary = clean_html(entry.get("summary", "").strip()) or title
 
-                if title:
-                    articles.append({
-                        "title": title,
-                        "link": link,
-                        "summary": summary,
-                    })
+                articles.append({
+                    "title": title,
+                    "link": real_link,
+                    "summary": summary,
+                })
+
+                if len(articles) >= MAX_ARTICLES:
+                    break
         except Exception as e:
             print(f"RSS取得エラー: {e}")
+
+        if len(articles) >= MAX_ARTICLES:
+            break
+
     return articles
 
 
-def summarize_article(client, article):
+def summarize_all_news(client, articles):
+    """
+    全ニュースを一括処理し、全体の総括とトレンド分析を生成する
+    """
+    articles_text = ""
+    for idx, item in enumerate(articles, 1):
+        articles_text += f"【記事{idx}】\nタイトル: {item['title']}\n概要: {item['summary']}\nURL: {item['link']}\n\n"
+
     prompt = f"""
-以下のニュース記事情報を読み込み、宇宙・安全保障の観点から要約と重要度評価を行ってください。
-記事が英語の場合は、タイトルと要約を自然な日本語に翻訳してください。
+あなたは宇宙・安全保障分野の専門アナリストです。
+以下に提供された本日の主要ニュース群（全{len(articles)}件）を横断的に分析し、全体の潮流・動向についての「総括レポート」を作成してください。
 
-【記事タイトル】
-{article['title']}
-
-【記事概要】
-{article['summary']}
+【収集されたニュース一覧】
+{articles_text}
 
 【出力フォーマット】
-■ タイトル: [日本語タイトル]
+以下の構成で出力してください（Markdown形式）。
 
-■ 重要度: [★1〜★5]
-（理由: 簡潔に記述）
+1. 本日の総括サマリー（3行〜5行程度）
+・本日収集されたニュース全体の共通テーマや、宇宙安全保障における最大の注目ポイントを要約してください。
 
-■ 3行要約:
-- [要約1]
-- [要約2]
-- [要約3]
+2. 主なトピック・動向（2〜3項目）
+・関連するニュースをグループ化し、どのような動きがあるかを弾丸リストで解説してください。
 
-■ URL: {article['link']}
+3. 各ニュース記事一覧
+・提供された全ニュースについて、日本語に統一したタイトルとリンクを一覧化してください。
+・フォーマット:
+  - [日本語タイトル](URL)
 """
+
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=prompt,
     )
     if not response or not response.text:
-        raise ValueError("Gemini応答が空です")
+        raise ValueError("Gemini応答が空でした。")
     return response.text.strip()
 
 
-def send_email(subject, body):
-    msg = MIMEMultipart()
+def send_html_email(subject, text_content):
+    """
+    iPhoneでも読みやすく、リンクが直接タップできるHTML形式でメールを送信
+    """
+    msg = MIMEMultipart("alternative")
     msg["From"] = GMAIL_USER
     msg["To"] = TO_EMAIL
     msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    # テキストを簡易的なHTML構造に変換
+    html_body = text_content.replace("\n", "<br>")
+    # Markdown形式のリンク [タイトル](URL) を HTMLの <a href="URL">タイトル</a> に変換
+    html_body = re.sub(
+        r'\[(.*?)\]\((https?://.*?)\)',
+        r'<a href="\2" style="color: #1a73e8; text-decoration: underline;">\1</a>',
+        html_body
+    )
+
+    full_html = f"""
+    <html>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; padding: 15px;">
+        <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 20px; border: 1px solid #e0e0e0;">
+          {html_body}
+        </div>
+      </body>
+    </html>
+    """
+
+    msg.attach(MIMEText(text_content, "plain", "utf-8"))
+    msg.attach(MIMEText(full_html, "html", "utf-8"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
@@ -124,76 +168,44 @@ def send_email(subject, body):
 
 def main():
     print("=" * 60)
-    print("宇宙・安全保障ニュース自動配信")
+    print("宇宙・安全保障ニュース 日刊総括レポート配信")
     print("=" * 60)
 
-    print("1. Gemini APIクライアントの初期化")
+    print("1. Gemini APIクライアント初期化")
     if not GEMINI_API_KEY:
         print("エラー: GEMINI_API_KEY が未設定です。")
         return
     client = genai.Client(api_key=GEMINI_API_KEY)
-    print(f"使用Geminiモデル: {GEMINI_MODEL}")
 
-    print("\n2. ニュース記事の取得")
+    print("\n2. ニュース記事の取得とURL解読中...")
     articles = fetch_latest_news()
-    print(f"検出された合計記事数: {len(articles)}件")
-
-    if not articles:
-        today_str = datetime.date.today().strftime("%Y-%m-%d")
-        send_email(
-            f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})",
-            "本日は該当する最新ニュースが検出されませんでした。"
-        )
-        return
-
-    summarized_results = []
-    seen_titles = set()
-    success_count = 0
-    error_count = 0
-
-    print("\n3. AI要約処理の開始")
-    for article in articles:
-        title_key = article["title"][:50].lower().strip()
-        if title_key in seen_titles:
-            continue
-        seen_titles.add(title_key)
-
-        print(f"\n[{success_count + error_count + 1}件目] タイトル: {article['title'][:80]}")
-
-        try:
-            print("  └ Geminiによる要約中...")
-            summary_text = summarize_article(client, article)
-            summarized_results.append(summary_text)
-            success_count += 1
-            print("  └ 要約成功")
-        except Exception as e:
-            error_count += 1
-            print(f"  └ 要約エラー: {e}")
-
-        if len(summarized_results) >= MAX_ARTICLES:
-            break
-        time.sleep(1)
-
-    print("\n4. 要約処理結果")
-    print(f"成功: {success_count}件 / 失敗: {error_count}件 / メール掲載: {len(summarized_results)}件")
+    print(f"  └ 有効な記事数: {len(articles)}件")
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
-    email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
-    divider = "\n\n" + ("=" * 50) + "\n\n"
+    email_subject = f"【日刊総括】宇宙・安全保障 ニュースダイジェスト ({today_str})"
 
-    if summarized_results:
-        email_body = (
-            f"{today_str} の宇宙・安全保障に関する主要ニュース（{len(summarized_results)}件）です。\n\n"
-            f"AI要約成功: {success_count}件\nAI要約失敗: {error_count}件\n"
-            + divider
-            + divider.join(summarized_results)
-        )
-    else:
-        email_body = f"{today_str} のニュース要約生成に失敗しました。"
+    if not articles:
+        print("ニュース記事が取得できませんでした。")
+        send_html_email(email_subject, f"{today_str} 本日は該当するニュースが検出されませんでした。")
+        return
 
-    print("\n5. メール送信")
-    send_email(email_subject, email_body)
-    print("送信完了しました！")
+    print("\n3. AIによる全体総括・傾向分析の生成中...")
+    try:
+        overall_summary = summarize_all_news(client, articles)
+        print("  └ 総括生成完了")
+    except Exception as e:
+        print(f"  └ AI分析エラー: {e}")
+        overall_summary = f"本日のニュース総括の生成に失敗しました。\n\n【収集記事一覧】\n" + "\n".join([f"- [{a['title']}]({a['link']})" for a in articles])
+
+    email_body = f"■ {today_str} 宇宙・安全保障トピックス分析\n\n" + overall_summary
+
+    print("\n4. メール送信中...")
+    try:
+        send_html_email(email_subject, email_body)
+        print("送信完了しました！")
+    except Exception as e:
+        print(f"メール送信エラー: {e}")
+
     print("=" * 60)
 
 
