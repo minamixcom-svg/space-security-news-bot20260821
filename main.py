@@ -25,17 +25,21 @@ RSS_URLS = [
 def fetch_latest_news():
     articles = []
     for url in RSS_URLS:
+        print(f"RSSを取得中: {url}")
         feed = feedparser.parse(url)
+        print(f"  └ エントリ数: {len(feed.entries)}")
+        
         for entry in feed.entries:
             title = entry.get("title", "").strip()
+            # linkがない場合はidやguidislinkフォールバック
             link = entry.get("link", "") or entry.get("id", "")
-            summary = entry.get("summary", "") or title
+            summary = entry.get("summary", "").strip() or title
 
-            if title and link:
+            if title:
                 articles.append(
                     {
                         "title": title,
-                        "link": link,
+                        "link": link if link else "https://news.google.com/",
                         "summary": summary,
                     }
                 )
@@ -59,7 +63,7 @@ def summarize_article(client, article):
 - [要約3]
 ■ URL: {article['link']}
 """
-    # 推奨モデル指定（gemini-2.0-flash / gemini-1.5-flash 等）
+    # 安定版モデルの指定
     response = client.models.generate_content(
         model="gemini-2.0-flash",
         contents=prompt,
@@ -81,6 +85,9 @@ def send_email(subject, body):
 
 def main():
     print("1. Gemini APIクライアントを初期化中...")
+    if not GEMINI_API_KEY:
+        print("エラー: GEMINI_API_KEY が設定されていません。")
+        return
     client = genai.Client(api_key=GEMINI_API_KEY)
 
     print("2. ニュース記事を取得中...")
@@ -88,6 +95,7 @@ def main():
     print(f"検出された合計記事数: {len(articles)}")
 
     if not articles:
+        print("ニュース記事が1件も取得できませんでした。メール通知を送信します。")
         send_email(
             f"【日刊】宇宙・安全保障 ニュースまとめ ({datetime.date.today()})",
             "本日は該当する最新ニュースが検出されませんでした。",
@@ -99,35 +107,43 @@ def main():
     count = 0
 
     for article in articles:
-        # 重複判定（タイトルベースで比較して同一ニュースを排除）
-        title_key = article["title"].lower()
+        # タイトル前方30文字で重複判定
+        title_key = article["title"][:30].lower()
         if title_key in seen_titles:
             continue
         seen_titles.add(title_key)
 
         try:
+            print(f"要約処理中 ({count + 1}件目): {article['title'][:25]}...")
             summary_text = summarize_article(client, article)
-            summarized_results.append(summary_text)
-            count += 1
-            print(f"要約成功 ({count}件目): {article['title'][:20]}...")
             
+            if summary_text:
+                summarized_results.append(summary_text)
+                count += 1
+                print(f"  └ 要約成功")
+            else:
+                print(f"  └ 警告: 要約レスポンスが空でした")
+
             if count >= 8:
                 break
 
-            # APIレート制限対策のウェイト処理
-            time.sleep(1)
+            time.sleep(1)  # レート制限対策
 
         except Exception as e:
-            print(f"要約エラー ({article['title']}): {e}")
+            print(f"  └ 要約エラー発生: {e}")
+
+    print(f"完成した要約数: {len(summarized_results)}件")
 
     if not summarized_results:
-        print("要約結果が作成されませんでした。")
+        print("要約結果が1件も作成されなかったため、送信を中止します。")
         return
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
+    
+    divider = "\n\n" + ("=" * 40) + "\n\n"
     email_body = f"{today_str} の宇宙・安全保障に関する主要ニュース（{len(summarized_results)}件）です。\n\n"
-    email_body += "\n\n" + ("=" * 40 + "\n\n").join(summarized_results)
+    email_body += divider + divider.join(summarized_results)
 
     print("3. メール送信中...")
     send_email(email_subject, email_body)
