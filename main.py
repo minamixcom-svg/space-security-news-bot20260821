@@ -15,6 +15,7 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
+# 利用可能な最新モデル「gemini-3.6-flash」を指定
 GEMINI_MODEL = "gemini-3.6-flash"
 MAX_ARTICLES = 10
 
@@ -113,7 +114,7 @@ def summarize_all_news(client, articles):
 ・本日収集されたニュース全体の共通テーマや、宇宙安全保障における最大の注目ポイントを要約してください。
 
 2. 主なトピック・動向（2〜3項目）
-・関連するニュースをグループ化し、どのような動きがあるかを弾丸リストで解説してください。
+・関連するニュースをグループ化し、どのような動きがあるかをリスト形式で解説してください。
 
 3. 各ニュース記事一覧
 ・提供された全ニュースについて、日本語に統一したタイトルとリンクを一覧化してください。
@@ -139,9 +140,7 @@ def send_html_email(subject, text_content):
     msg["To"] = TO_EMAIL
     msg["Subject"] = subject
 
-    # テキストを簡易的なHTML構造に変換
     html_body = text_content.replace("\n", "<br>")
-    # Markdown形式のリンク [タイトル](URL) を HTMLの <a href="URL">タイトル</a> に変換
     html_body = re.sub(
         r'\[(.*?)\]\((https?://.*?)\)',
         r'<a href="\2" style="color: #1a73e8; text-decoration: underline;">\1</a>',
@@ -176,6 +175,7 @@ def main():
         print("エラー: GEMINI_API_KEY が未設定です。")
         return
     client = genai.Client(api_key=GEMINI_API_KEY)
+    print(f"使用モデル: {GEMINI_MODEL}")
 
     print("\n2. ニュース記事の取得とURL解読中...")
     articles = fetch_latest_news()
