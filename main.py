@@ -63,7 +63,7 @@ def summarize_article(client, article):
 """
     # 互換性のある正式モデル名「gemini-2.0-flash」を指定
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3.6-flash",
         contents=prompt,
     )
     return response.text.strip()
