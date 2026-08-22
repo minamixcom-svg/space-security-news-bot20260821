@@ -16,7 +16,7 @@ GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
-# 無料枠で確実に動作する標準モデル
+# 安定して動作する標準モデル
 GEMINI_MODEL = "gemini-1.5-flash"
 MAX_ARTICLES = 10
 
@@ -45,9 +45,6 @@ def clean_html(text):
 
 
 def resolve_link(google_url):
-    """
-    Google Newsの暗号化URLを元記事の直リンクに復元（iPhone/Safari対策）
-    """
     try:
         decoded = new_decodurl(google_url)
         if decoded and decoded.get("status") and decoded.get("decoded_url"):
@@ -94,9 +91,6 @@ def fetch_latest_news():
 
 
 def summarize_all_news(client, articles):
-    """
-    全ニュースを1回のリクエストでまとめて処理（無料枠の節約と総括生成）
-    """
     articles_text = ""
     for idx, item in enumerate(articles, 1):
         articles_text += f"【記事{idx}】\nタイトル: {item['title']}\n概要: {item['summary']}\nURL: {item['link']}\n\n"
@@ -134,9 +128,6 @@ def summarize_all_news(client, articles):
 
 
 def send_html_email(subject, text_content):
-    """
-    iPhoneでもリンクが青文字でそのまま開けるHTML形式メール
-    """
     msg = MIMEMultipart("alternative")
     msg["From"] = GMAIL_USER
     msg["To"] = TO_EMAIL
@@ -169,7 +160,7 @@ def send_html_email(subject, text_content):
 
 def main():
     print("=" * 60)
-    print("★最新版プログラム起動★ 宇宙・安全保障ニュース 日刊総括レポート")
+    print("★★★ 【最新コード実行中】宇宙・安全保障 ニュース総括 ★★★")
     print("=" * 60)
 
     print("1. Gemini APIクライアント初期化")
