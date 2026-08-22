@@ -21,7 +21,7 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 TO_EMAIL = "minamix.com@gmail.com"
 
 # 正式なモデル名を指定
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 MAX_ARTICLES = 8
 
@@ -124,7 +124,7 @@ def summarize_article(client, article):
 """
 
     response = client.models.generate_content(
-        model="gemini-3.6-flash",
+        model= GEMINI_MODEL,
         contents=prompt,
     )
 
