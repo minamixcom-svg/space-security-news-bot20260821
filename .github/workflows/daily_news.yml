@@ -3,7 +3,7 @@ name: Daily News Summary
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 21 * * *' # 毎日朝6時（JST）
+    - cron: '0 21 * * *'
 
 jobs:
   run-script:
