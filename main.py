@@ -23,7 +23,7 @@ GEMINI_MODEL = "gemini-3.6-flash"
 print("【確認】GEMINI_MODEL =", GEMINI_MODEL)
 MAX_ARTICLES = 10
 
-JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル　OR 軍事)")
+JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル　OR 軍事　OR 自衛隊)")
 EN_QUERY = urllib.parse.quote('("space security" OR "space defense" OR "military space"　OR "US" )')
 
 RSS_URLS = [
