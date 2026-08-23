@@ -120,6 +120,7 @@ def summarize_all_news(client, articles):
 """
 
     response = client.models.generate_content(
+        GEMINI_MODEL = "gemini-3.6-flash"
         model=GEMINI_MODEL,
         contents=prompt,
     )
