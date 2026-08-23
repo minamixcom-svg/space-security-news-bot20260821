@@ -23,8 +23,8 @@ GEMINI_MODEL = "gemini-3.6-flash"
 print("【確認】GEMINI_MODEL =", GEMINI_MODEL)
 MAX_ARTICLES = 10
 
-JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
-EN_QUERY = urllib.parse.quote('("space security" OR "space defense" OR "military space")')
+JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル　OR 宇宙)")
+EN_QUERY = urllib.parse.quote('("space security" OR "space defense" OR "military space"　OR "US" )')
 
 RSS_URLS = [
     f"https://news.google.com/rss/search?q={JP_QUERY}&hl=ja&gl=JP&ceid=JP:ja",
@@ -105,7 +105,7 @@ def summarize_all_news(client, articles):
 
     prompt = f"""
 あなたは宇宙・安全保障分野の専門アナリストです。
-以下に提供された本日の主要ニュース群（全{len(articles)}件）を横断的に分析し、全体の潮流・動向についての「総括レポート」を作成してください。
+以下に提供された本日の主要ニュース群（全{len(articles)}件）を横断的に分析し、全体の潮流・動向についての「総括レポート」を作成してください。特に時事ニュースとして防衛省、航空自衛隊及び航空自衛隊の活動に関連するものに重点を置いてください。
 
 【収集されたニュース一覧】
 {articles_text}
