@@ -20,6 +20,7 @@ TO_EMAIL = "minamix.com@gmail.com"
 
 # 安定して動作する標準モデル
 GEMINI_MODEL = "gemini-3.6-flash"
+print("【確認】GEMINI_MODEL =", GEMINI_MODEL)
 MAX_ARTICLES = 10
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル)")
