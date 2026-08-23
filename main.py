@@ -11,7 +11,7 @@ import urllib.parse
 
 import feedparser
 from google import genai
-from googlenewsdecoder import new_decodurl
+from googlenewsdecoder import gnewsdecoder
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GMAIL_USER = os.environ.get("GMAIL_USER")
@@ -49,11 +49,16 @@ def clean_html(text):
 
 def resolve_link(google_url):
     try:
-        decoded = new_decodurl(google_url)
+        decoded = gnewsdecoder(google_url)
+
         if decoded and decoded.get("status") and decoded.get("decoded_url"):
             return decoded["decoded_url"]
+
+        print(f"  └ URLデコード失敗: {decoded}")
+
     except Exception as e:
-        print(f"  └ URLデコード失敗: {e}")
+        print(f"  └ URLデコード例外: {e}")
+
     return google_url
 
 
