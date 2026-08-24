@@ -34,8 +34,15 @@ MAX_ARTICLES = 8
 # RSS取得先リスト（Google News ＋ 専門ニュースサイト）
 # ============================================================
 
-JP_QUERY = urllib.parse.quote('("宇宙" OR "衛星") AND ("安全保障" OR "防衛" OR "軍" OR "自衛隊")')
-EN_QUERY = urllib.parse.quote("space security" OR "space force" OR "satellite" OR "military")
+# 日本語キーワードの拡張（1つの文字列として定義）
+JP_QUERY = urllib.parse.quote(
+    '("宇宙" OR "衛星") AND ("安全保障" OR "防衛" OR "軍事" OR "自衛隊")'
+)
+
+# 英語キーワードの拡張（1つの文字列として定義）
+EN_QUERY = urllib.parse.quote(
+    '("space security" OR "space force" OR "satellite" OR "military")'
+)
 
 RSS_URLS = [
     # --- Google News RSS ---
