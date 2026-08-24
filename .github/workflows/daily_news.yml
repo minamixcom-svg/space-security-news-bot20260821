@@ -3,7 +3,11 @@ name: Daily News Summary
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 21 * * *'
+    # JST(日本時間) 07:00 に実行したい場合
+    - cron: '0 22 * * *'
+    
+    # JST(日本時間) 朝06:00 に実行したい場合は UTC 21:00 (元の設定)
+    # - cron: '0 21 * * *'
 
 jobs:
   run-script:
@@ -29,5 +33,5 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          TO_EMAILS: ${{ secrets.TO_EMAILS }} # 追加/修正
+          TO_EMAILS: ${{ secrets.TO_EMAILS }}
         run: python main.py
