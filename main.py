@@ -31,10 +31,10 @@ GEMINI_MODEL = "gemini-3.6-flash"
 MAX_ARTICLES = 10
 
 # 1つのRSSフィードから取得する最大件数
-MAX_ENTRIES_PER_FEED = 20
+MAX_ENTRIES_PER_FEED = 10
 
 # ニュースの対象時間（時間単位: 30時間）
-MAX_AGE_HOURS = 30
+MAX_AGE_HOURS = 28
 
 
 # ============================================================
