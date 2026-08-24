@@ -1,3 +1,4 @@
+import calendar
 import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -26,22 +27,27 @@ TO_EMAILS = [email.strip() for email in TO_EMAILS_ENV.split(",") if email.strip(
 # Geminiで使用するモデル
 GEMINI_MODEL = "gemini-3.6-flash"
 
-# 1日にメールへ掲載するニュース数（増送せず最大8件を維持）
-MAX_ARTICLES = 8
+# 1日にメールへ掲載するニュース数
+MAX_ARTICLES = 10
+
+# 1つのRSSフィードから取得する最大件数
+MAX_ENTRIES_PER_FEED = 20
+
+# ニュースの対象時間（時間単位: 30時間）
+MAX_AGE_HOURS = 30
 
 
 # ============================================================
 # RSS取得先リスト（Google News ＋ 専門ニュースサイト）
 # ============================================================
 
-# 日本語キーワードの拡張（1つの文字列として定義）
+# Google News用に "when:30h" を検索クエリに付与
 JP_QUERY = urllib.parse.quote(
-    '("宇宙" OR "衛星") AND ("安全保障" OR "防衛" OR "軍事" OR "自衛隊")'
+    '("宇宙" OR "衛星") AND ("安全保障" OR "防衛" OR "軍事" OR "自衛隊") when:30h'
 )
 
-# 英語キーワードの拡張（1つの文字列として定義）
 EN_QUERY = urllib.parse.quote(
-    '("space security" OR "space force" OR "satellite" OR "military")'
+    '("space security" OR "space force" OR "satellite" OR "military") when:30h'
 )
 
 RSS_URLS = [
@@ -50,9 +56,9 @@ RSS_URLS = [
     f"https://news.google.com/rss/search?q={EN_QUERY}&hl=en-US&gl=US&ceid=US:en",
 
     # --- 宇宙・防衛 専門メディア RSS ---
-    "https://spacenews.com/feed",                           # SpaceNews (宇宙産業・政策・宇宙軍)
-    "https://feeds.feedburner.com/BreakingDefense",         # Breaking Defense (防衛・安全保障全般)
-    "https://www.defenseone.com/rss/all",                  # Defense One (米軍・テクノロジー)
+    "https://spacenews.com/feed",                           # SpaceNews
+    "https://feeds.feedburner.com/BreakingDefense",         # Breaking Defense
+    "https://www.defenseone.com/rss/all",                  # Defense One
 ]
 
 
@@ -87,6 +93,31 @@ def clean_html(text):
 
 
 # ============================================================
+# 日時フィルター判定
+# ============================================================
+
+def is_within_30_hours(entry):
+    """
+    記事の公開日時を取得し、現在時刻から指定時間（30時間）以内か判定する。
+    日時情報が取得できない場合は、判定不能のため除外せずTrueを返す。
+    """
+    published_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+
+    if not published_parsed:
+        # 日時情報がない場合は弾かずに通す
+        return True
+
+    # struct_time を UTC のエポック秒に変換
+    published_timestamp = calendar.timegm(published_parsed)
+    current_timestamp = datetime.datetime.now(datetime.timezone.utc).timestamp()
+
+    # 経過時間（時間単位）を計算
+    age_hours = (current_timestamp - published_timestamp) / 3600
+
+    return age_hours <= MAX_AGE_HOURS
+
+
+# ============================================================
 # ニュース取得
 # ============================================================
 
@@ -99,9 +130,14 @@ def fetch_latest_news():
         try:
             feed = feedparser.parse(url)
 
-            print(f"  └ 取得件数: {len(feed.entries)}件")
+            entries = feed.entries[:MAX_ENTRIES_PER_FEED]
+            filtered_count = 0
 
-            for entry in feed.entries:
+            for entry in entries:
+                # 30時間以内の記事かチェック
+                if not is_within_30_hours(entry):
+                    continue
+
                 title = entry.get("title", "").strip()
 
                 link = (
@@ -129,6 +165,9 @@ def fetch_latest_news():
                             "summary": summary,
                         }
                     )
+                    filtered_count += 1
+
+            print(f"  └ 30時間以内の対象: {filtered_count}件")
 
         except Exception as e:
             print(f"  └ RSS取得エラー: {e}")
@@ -184,7 +223,6 @@ def summarize_article(client, article):
         contents=prompt,
     )
 
-    # Geminiから応答が返ってこなかった場合
     if response is None:
         raise ValueError("Geminiから応答が返されませんでした。")
 
@@ -199,11 +237,6 @@ def summarize_article(client, article):
 # ============================================================
 
 def create_error_summary(article):
-    """
-    Geminiによる要約に失敗した場合でも、
-    ニュースそのものをメールに残す。
-    """
-
     return (
         f"■ タイトル: {article['title']}\n"
         f"■ AI要約: 今回はAIによる要約を取得できませんでした。\n"
@@ -228,7 +261,6 @@ def send_email(subject, body):
     if not TO_EMAILS:
         raise ValueError("TO_EMAILS が設定されていません。")
 
-    # SMTP接続を1回確立し、ループで各宛先に個別送信（宛先非公開）
     with smtplib.SMTP_SSL(
         "smtp.gmail.com",
         465
@@ -243,7 +275,7 @@ def send_email(subject, body):
             msg = MIMEMultipart()
 
             msg["From"] = GMAIL_USER
-            msg["To"] = to_email  # 受信者本人のアドレスのみ設定
+            msg["To"] = to_email
             msg["Subject"] = subject
 
             msg.attach(
@@ -299,7 +331,7 @@ def main():
     # 2. ニュース記事取得
     # --------------------------------------------------------
 
-    print("\n2. ニュース記事の取得")
+    print("\n2. ニュース記事の取得（30時間以内の記事を対象）")
 
     articles = fetch_latest_news()
 
@@ -311,7 +343,7 @@ def main():
     if not articles:
 
         print(
-            "ニュース記事が1件も取得できませんでした。"
+            "直近30時間以内の該当ニュース記事がありませんでした。"
         )
 
         today_str = datetime.date.today().strftime(
@@ -325,7 +357,7 @@ def main():
 
         email_body = (
             f"{today_str} の宇宙・安全保障ニュースです。\n\n"
-            "本日は該当する最新ニュースが"
+            "直近30時間以内に該当する最新ニュースは"
             "検出されませんでした。"
         )
 
@@ -359,7 +391,6 @@ def main():
 
     for article in articles:
 
-        # タイトルの先頭50文字を重複判定に使用
         title_key = (
             article["title"][:50]
             .lower()
@@ -424,17 +455,14 @@ def main():
                 f"  └ 要約エラー: {e}"
             )
 
-            # 要約に失敗してもニュースをメールに残す
             summarized_results.append(
                 create_error_summary(article)
             )
 
-        # 成功＋失敗を合わせて最大8件に到達したら終了
         if len(summarized_results) >= MAX_ARTICLES:
             break
 
-        # Gemini API（無料枠：15 RPM）を超過しないよう、リクエスト間隔を4秒空ける
-        time.sleep(4)
+        time.sleep(1)
 
     # --------------------------------------------------------
     # 4. 要約結果確認
@@ -479,7 +507,7 @@ def main():
         email_body = (
             f"{today_str} の宇宙・安全保障に関する"
             f"主要ニュース "
-            f"（{len(summarized_results)}件）です。\n\n"
+            f"（直近30時間以内・{len(summarized_results)}件）です。\n\n"
         )
 
         email_body += (
@@ -494,7 +522,6 @@ def main():
 
     else:
 
-        # 万一の場合でも本文が空にならないようにする
         email_body = (
             f"{today_str} の宇宙・安全保障ニュースです。\n\n"
             "ニュースの取得またはAI要約に失敗しました。\n"
