@@ -13,15 +13,23 @@ import feedparser
 from google import genai
 from googlenewsdecoder import gnewsdecoder
 
+# ============================================================
+# 設定
+# ============================================================
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GMAIL_USER = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
-TO_EMAIL = "minamix.com@gmail.com"
 
-# 安定して動作する標準モデル
+# 送信先（環境変数 TO_EMAILS からカンマ区切りで取得）
+TO_EMAILS_ENV = os.environ.get("TO_EMAILS", "")
+TO_EMAILS = [email.strip() for email in TO_EMAILS_ENV.split(",") if email.strip()]
+
+# Geminiで使用するモデル
 GEMINI_MODEL = "gemini-3.6-flash"
-print("【確認】GEMINI_MODEL =", GEMINI_MODEL)
-MAX_ARTICLES = 10
+
+# 1日にメールへ掲載するニュース数
+MAX_ARTICLES = 8
 
 JP_QUERY = urllib.parse.quote("宇宙 (安全保障 OR 防衛 OR 衛星 OR ミサイル　OR 軍事　OR 自衛隊)")
 EN_QUERY = urllib.parse.quote('("space security" OR "space defense" OR "military space"　OR "US" )')
