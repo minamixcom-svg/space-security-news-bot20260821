@@ -162,25 +162,33 @@ def fetch_latest_news():
 
 
 # ============================================================
-# Gemini処理（個別要約・全体まとめ）
+# Gemini処理（専門家向け要約・戦略評価）
 # ============================================================
 
 def summarize_article(client, article):
-    """個別ニュースの3行要約（※URLは含めない）"""
+    """防衛・安全保障アナリスト視点による個別分析"""
     prompt = f"""
-以下のニュース記事を読み込み、宇宙・安全保障の観点から要約と重要度評価を行ってください。
-英語の場合はタイトルと要約を自然な日本語に翻訳してください。
+あなたは日本の防衛・安全保障専門家（政策立案者、防衛省幹部等）に助言を行う「宇宙安全保障アナリスト」です。
+以下のニュース記事を分析し、指定の専門的フォーマットに従ってアウトプットを作成してください。
+英語記事の場合は、タイトルや内容を適切に日本語翻訳・解釈した上で記述してください。
+
+【重視すべき観点】
+・日本の宇宙安全保障および防衛体制にインパクトを与えるアクター（米国、中国、ロシア、北朝鮮、欧州等）の動向
+・技術（SDA/SSA、PNT、ISR、ASAT等）、ドクトリン、予算、アライアンス（日米同盟等）への波及効果
 
 【記事タイトル】: {article['title']}
 【記事概要】: {article['summary']}
 
-【出力フォーマット】（以下の形式を厳守し、URLは出力しないでください）
-■ タイトル: [日本語タイトル]
-■ 重要度: [★1〜★5]（理由: 簡潔に記述）
-■ 3行要約:
-- [要約1]
-- [要約2]
-- [要約3]
+【出力フォーマット】（以下の見出し・形式を厳守し、URLは含めないでください）
+■ タイトル: [定性・定量的かつ明確な日本語表記]
+■ 重要度評価: [★1〜★5]（評価理由: 簡潔に明記）
+■ 事実概要（Fact）:
+- [事実1]
+- [事実2]
+■ 安全保障・戦略的インプリケーション（So What?）:
+- [日本の防衛、日米同盟、地域軍事バランス、自衛隊オペレーション等への影響・インプリケーション]
+■ 今後の注視点（Watch Items）:
+- [今後警戒または確認すべきアクションやイベント]
 """
     response = client.models.generate_content(
         model=GEMINI_MODEL,
@@ -192,20 +200,20 @@ def summarize_article(client, article):
 
 
 def generate_overall_summary(client, summarized_texts):
-    """全記事を俯瞰した『今日のニュースまとめ』の生成"""
+    """専門家向けのエグゼクティブ・サマリー（戦略評価）"""
     all_content = "\n\n".join(summarized_texts)
     prompt = f"""
-以下は本日収集された宇宙・安全保障に関する主要ニュースの要約一覧です。
-これらを全体的に俯瞰し、本日の主な動向や注目点を3〜5文程度（または3箇条書き）で「今日のニュースまとめ」として記述してください。
+以下は、本日収集された宇宙安全保障関連ニュースの分析レポート一覧です。
+防衛・安全保障の専門家（意思決定層）向けに、本日の動向を統括した「エグゼクティブ・サマリー（戦略評価）」を作成してください。
 
-【ニュース一覧】
+【ニュース分析一覧】
 {all_content}
 
 【出力フォーマット】
-【今日のニュースまとめ】
-・[全体動向1]
-・[全体動向2]
-・[全体動向3]
+【本日の戦略評価・インテリジェンス論点】
+・[主要アクターの動向と全体的トレンドの概観]
+・[日本の防衛・宇宙安全保障政策における最重要留意事項]
+・[短期〜中長期的な抑止力・実効性への影響評価]
 """
     try:
         response = client.models.generate_content(
@@ -217,7 +225,7 @@ def generate_overall_summary(client, summarized_texts):
     except Exception as e:
         print(f"全体まとめ生成エラー: {e}")
     
-    return "【今日のニュースまとめ】\n本日検出されたニュースの個別詳細は以下をご確認ください。"
+    return "【本日の戦略評価・インテリジェンス論点】\n本日検出されたニュースの個別分析詳細は以下をご確認ください。"
 
 
 # ============================================================
@@ -246,7 +254,7 @@ def send_email(subject, body):
 
 def main():
     print("=" * 60)
-    print("宇宙・安全保障ニュース自動配信")
+    print("宇宙・安全保障ニュース自動配信（インテリジェンス・レポート版）")
     print("=" * 60)
 
     if not GEMINI_API_KEY:
@@ -263,11 +271,11 @@ def main():
     print(f"\n検出された合計記事数: {len(articles)}件")
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
-    email_subject = f"【日刊】宇宙・安全保障 ニュースまとめ ({today_str})"
+    email_subject = f"【日刊インテリジェンス】宇宙安全保障 政策・分析レポート ({today_str})"
 
     if not articles:
         print("直近28時間以内の該当ニュース記事がありませんでした。")
-        send_email(email_subject, f"{today_str} の宇宙・安全保障ニュースです。\n\n該当する最新ニュースは検出されませんでした。")
+        send_email(email_subject, f"{today_str} の宇宙安全保障レポートです。\n\n該当する最新ニュースは検出されませんでした。")
         return
 
     summarized_results = []
@@ -275,7 +283,7 @@ def main():
     seen_titles = set()
     success_count = 0
 
-    print("\nAI要約処理の開始")
+    print("\nAIアナリシス処理の開始")
     for article in articles:
         title_key = article["title"][:50].lower().strip()
         if title_key in seen_titles:
@@ -287,9 +295,9 @@ def main():
             summarized_results.append(summary_text)
             url_list.append(f"・{article['title']}\n  {article['link']}")
             success_count += 1
-            print(f"  └ 要約成功: {article['title'][:40]}")
+            print(f"  └ 分析成功: {article['title'][:40]}")
         except Exception as e:
-            print(f"  └ 要約エラー: {e}")
+            print(f"  └ 分析エラー: {e}")
 
         if len(summarized_results) >= MAX_ARTICLES:
             break
@@ -297,9 +305,9 @@ def main():
         time.sleep(1)
 
     # --------------------------------------------------------
-    # 全体の「今日のニュースまとめ」を生成
+    # 全体の「エグゼクティブ・サマリー」を生成
     # --------------------------------------------------------
-    print("\n「今日のニュースまとめ」の生成中...")
+    print("\n「エグゼクティブ・サマリー（戦略評価）」の生成中...")
     overall_summary = generate_overall_summary(client, summarized_results)
 
     # --------------------------------------------------------
@@ -307,15 +315,15 @@ def main():
     # --------------------------------------------------------
     divider = "\n\n" + ("=" * 50) + "\n\n"
     
-    # 1. ヘッダー & 今日のニュースまとめ
-    email_body = f"{today_str} の宇宙・安全保障ニュース（主要{len(summarized_results)}件）\n\n"
+    # 1. ヘッダー & エグゼクティブ・サマリー
+    email_body = f"【宇宙安全保障 政策・分析ブリーフィング】 ({today_str})\n主要分析対象: {len(summarized_results)}件\n\n"
     email_body += overall_summary + divider
 
-    # 2. 個別ニュースの3行要約一覧
+    # 2. 個別ニュースのアナリシス一覧
     email_body += divider.join(summarized_results) + divider
 
     # 3. 参照URL一覧（末尾に一括配置）
-    email_body += "【参照URL一覧】\n" + "\n".join(url_list)
+    email_body += "【情報ソース一覧】\n" + "\n".join(url_list)
 
     # --------------------------------------------------------
     # 送信
