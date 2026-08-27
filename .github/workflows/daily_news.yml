@@ -1,7 +1,7 @@
 name: Daily News Summary
 
 on:
-  workflow_dispatch:
+  #workflow_dispatch:
   schedule:
     # JST(日本時間) 06:00 に実行したい場合
     - cron: '0 21 * * *'
